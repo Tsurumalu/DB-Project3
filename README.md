@@ -1,8 +1,9 @@
 # DB-Project3仓库简介
 该仓库为南方科技大学CS213数据库原理(H)课程的Project3项目文件仓库。
 目录下/sql文件夹中包含测试所用到的sql脚本文件，  
-    /initial_data_from_cmd 文件夹中包含通过运行pgbench进行测试所得到的输出数据  
+    /initial_data_from_cmd 文件夹中包含通过运行pgbench进行测试所得到的输出数据。  
     /report 文件夹中包含项目报告的pdf文件，由于格式限制，可以下拉到本地后用本地pdf阅读器阅读。  
+    /datasets 文件夹中包含项目实验中用到的数据集。
     如有疑问，可联系12311153@mail.sustech.edu.cn
 
 # 项目内容介绍
@@ -18,6 +19,10 @@ pgbench 是 PostgreSQL 自带的一个基准测试工具， 用于评估数据�
 
 - [在docker上安装Postgres及openGauss](./docx/project3-openGaussGuideline.pdf)
 > Reference: CS213课程助教 Ziyang Zhang
+#### 注意：
+- 若docker容器无法正常运行：删掉容器，并尝试将openGauss的image版本改为3.0.0后重复先前操作。
+- 注意文件路径最好不要包含中文、空格。
+- 注意openGauss的密码要求：需要包含大小写、数字、特殊字符（建议使用!或@）
 
 ## 配置pgbench
 ### 0.**环境配置**  
@@ -29,20 +34,21 @@ Postgres的安装包中已带有pgbench工具，在终端运行pgbench，首先�
 <img src="./docx/环境变量.png" width = "60%" alt="InternalNode" align = center />
 
 ### 1.**初始化**  
-pgbench -i -h [主机名] -p [端口] -U [用户名称] -d [数据库名称] 
+
+    pgbench -i -h [主机名] -p [端口] -U [用户名称] -d [数据库名称] 
 其中，-i -- initialize 表示对资料库初始化  
 -p -- port 指代数据库连接的端口  
 -h -- host 指代数据库连接的主机  
 -U -- User 指代连接数据库时登录的用户，输入的密码也应当是该用户的对应密码（PostgreSQL默认为postgres；openGauss默认为gaussdb）  
 -d -- database 指代数据库名称（两者均默认为postgres）
 
-> 以本人在本地测试为例：  
+以本人在本地测试为例：  
 > （在PostgreSQL中进行初始化）pgbench -i -h localhost -p 5432 -U postgres -d postgres  
 > （在openGauss中进行初始化）pgbench -h localhost -p 15432 -U gaussdb -d postgres -i
 
 回车确认后，需要输入用户密码进行操作。
 
-### 可能遇到的问题
+#### 可能遇到的问题
 在本人进行初始化过程中，发现出现过以下报错
 - 找不到pgbench_branches
 <img src="./docx/报错1.png" width = "100%" alt="InternalNode" align=center />
@@ -71,8 +77,64 @@ pgbench -i -h [主机名] -p [端口] -U [用户名称] -d [数据库名称]
 |transaction_test|并发处理能力、效率与资源使用率|
 
 ### 3.测试命令
-首先，我们需要将终端切换到脚本所在目录下。  
+**首先，我们需要将终端切换到脚本文件所在的本地目录下。**
+接着，可以输入以下格式命令： 
+
     pgbench -c [客户端数目] -j [并发线程数] -T[运行总时长] -h [主机名] -p [端口] -U [用户名称] -d [数据库名称] -f [测试脚本文件名]
+其中，-c --client 表示客户端数目  
+-j --jobs 表示并发时的线程数
+-T --Time 表示运行的总时长（秒）
+-f --file 表示该测试运行的脚本名称
+-r --report 表示输出脚本中每一条语句的执行延迟
+在实验中也可以用-t来指定每个客户端发出的事务数，但注意-t 和-T 不能同时使用。
+其余相关的命令符，可以参照[PostgreSQL使用手册](https://docs.postgresql.tw/reference/client-applications/pgbench#yu-fa)
 
+例如，在并发处理能力测试时，本人所使用的命令行如下：
 
+    pgbench -c 100 -j 64 -T 600 -r -h localhost -p 15432 -U gaussdb -d postgres -f transaction_test.sql
+表示在客户端数目为100，线程数为64，总运行时长为600秒，运行脚本"transaction_test.sql"所进行的测试。测试结束后，pgbench将会自动输出以下结果：
 
+    transaction type: transaction_test.sql
+    scaling factor: 1
+    query mode: simple
+    number of clients: 100
+    number of threads: 64
+    maximum number of tries: 1
+    duration: 600 s
+    number of transactions actually processed: 898 <--实际完成的总事务数
+    number of failed transactions: 0 (0.000%) <--失败的事务数
+    latency average = 66865.470 ms <--平均延迟
+    initial connection time = 327.265 ms <--初始连接时长
+    tps = 1.495540 (without initial connection time) <--吞吐量（平均交易完成量）
+    statement latencies in milliseconds and failures:<--每条语句的执行延迟时长（毫秒）
+            21.834           0  DROP TABLE IF EXISTS transaction_test_table;
+            45.929           0  CREATE TABLE transaction_test_table 
+            490.210          0  INSERT INTO transaction_test_table (id,name, num)
+            19.722           0  SELECT COUNT(*) FROM transaction_test_table WHERE transaction_test_table.num = 75000;
+            17.461           0  SELECT id,name,num FROM transaction_test_table WHERE transaction_test_table.num BETWEEN 500 AND 5000;
+            15.530           0  INSERT INTO transaction_test_table (id,name, num)
+            10.688           0  INSERT INTO transaction_test_table (id,name, num)
+            25.287           0  UPDATE transaction_test_table SET num = num + 100 WHERE num = 12130;
+            25.655           0  DELETE FROM transaction_test_table
+    pgbench: error: Run was aborted; the above results are incomplete.
+
+通过输出信息，我们可以得到我们相应测试的数据结果，用来对比与分析，得到相应的实验结果。
+### 可能遇到的问题
+- pgbench在openGauss上无法初始化也无法运行
+<img src= "./docx/报错4.png" width = "100%" alt="InternalNode" align =center />
+发现在PostgreSQL版本为12时会出现以上错误，需要将PostgreSQL版本升为17.2并改变环境变量中的相应路径地址，之后pgbench能够自动初始化并进行测试。
+<img src= "./docx/openGauss初始化运行.png" width = "100%" alt="InternalNode" align =center />
+
+## 其余实验相关操作
+
+- 数据集来源：[kaggle](https://www.kaggle.com/)
+- CPU、内存和磁盘使用情况监控：在运行脚本时打开系统任务管理器
+- 数据库管理工具：Jetbrains开发的 [Datagrip](https://www.jetbrains.com.cn/datagrip/promo/?utm_source=baidu&utm_medium=cpc&utm_campaign=cn-bai-br-datagrip-ph-pc&utm_content=datagrip-pure&utm_term=datagrip)
+
+## 相关配置
+|类型|配置|
+|:-:|:-:|
+|**计算机型号**|Surface Pro 8 Model 1983 i7|
+|**CPU（处理器）**|11th Gen Intel® Core™ i7-1185G7 @3.00GHz|
+|**已安装的RAM（内存）**|16GB|
+|**磁盘**|SAMSUNG MZ9LQ512HALU-00000 （SSD）|
